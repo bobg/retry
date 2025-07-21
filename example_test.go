@@ -29,16 +29,18 @@ func ExampleTryer() {
 	// Retry a simple function that fails on its first two tries and succeeds on its third.
 	err := tr.Try(ctx, func(n int) error {
 		if n < 2 {
+			fmt.Printf("Failed on try #%d\n", n)
 			return fmt.Errorf("failed on try #%d", n)
 		}
 		fmt.Printf("Succeeded on try #%d\n", n)
 		return nil
 	})
-
 	if err != nil {
 		fmt.Printf("Error: %s\n", err)
 	}
 
 	// Output:
+	// Failed on try #0
+	// Failed on try #1
 	// Succeeded on try #2
 }

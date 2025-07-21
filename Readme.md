@@ -13,6 +13,17 @@ You can configure the interval between tries and do exponential backoff.
 You can add random jitter to the time interval.
 And you can supply a function for discriminating between retryable and non-retryable errors.
 
+## Usage
+
+```go
+tr := retry.Tryer{
+  Max:   5,
+  Delay: 100 * time.Millisecond,
+  Scale: 0.25,
+}
+err := tr.Try(ctx, myFunc)
+```
+
 ## Seriously, another retry library for Go?
 
 There are already some excellent retry libraries for Go.

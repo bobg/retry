@@ -22,17 +22,20 @@ import (
 // set a deadline on the context passed to [Tryer.Try].
 type Tryer struct {
 	// Max is the maximum number of tries to make.
-	// [Tryer.Try] always makes at least one attempt,
-	// so leaving this set to 0 is the same as setting it to 1.
+	// [Tryer.Try] always makes at least one attempt.
+	// Leaving this set to 0 is the same as setting it to 1.
 	// A negative value means there is no limit on the number of attempts.
 	Max int
 
 	// Delay is the initial delay between attempts.
 	// Be sure to set this to a non-zero value to avoid an expensive busy loop.
+	// The delay can increase after each attempt; see the Scale field below.
 	Delay time.Duration
 
-	// Jitter is the maximum amount of random jitter to add to the delay on each attempt.
-	// It must be less than or equal to Delay.
+	// Jitter is the maximum amount of random jitter to add to,
+	// or subtract from,
+	// the delay on each attempt.
+	// This value is silently limited to each iteration's delay.
 	Jitter time.Duration
 
 	// Scale increases the delay after each attempt, multiplying it by 1+Scale.
@@ -98,11 +101,15 @@ func (tr Tryer) calcDelay(n int) time.Duration {
 		scale := math.Pow(1+tr.Scale, float64(n-1))
 		delay = time.Duration(float64(delay) * scale)
 	}
-	if tr.Jitter > 0 && tr.Jitter <= tr.Delay {
-		var (
-			rand   = 2*tr.randFloat() - 1 // [-1, 1)
-			jitter = time.Duration(float64(tr.Jitter) * rand)
-		)
+
+	jitter := tr.Jitter
+	if jitter > delay {
+		jitter = delay
+	}
+
+	if jitter > 0 {
+		rand := 2*tr.randFloat() - 1 // [-1, 1)
+		jitter = time.Duration(float64(jitter) * rand)
 		delay += jitter
 	}
 
