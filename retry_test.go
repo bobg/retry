@@ -167,12 +167,13 @@ func TestCancel(t *testing.T) {
 }
 
 func TestCalcDelay(t *testing.T) {
-	floats := []float64{0.1, 0.9, 0.2}
+	floats := []float64{0.1, 0.9, 0.2, 0.8}
 
 	tr := Tryer{
-		Delay:  100 * time.Millisecond,
-		Jitter: 50 * time.Millisecond,
-		Scale:  0.5,
+		Delay:    100 * time.Millisecond,
+		MaxDelay: 300 * time.Millisecond,
+		Jitter:   50 * time.Millisecond,
+		Scale:    0.5,
 		Rand: func() float64 {
 			result := floats[0]
 			floats = floats[1:]
@@ -184,9 +185,10 @@ func TestCalcDelay(t *testing.T) {
 		(100 - 40) * time.Millisecond, // scale = 1, jitter = 50ms * (0.1 * 2 - 1)
 		(150 + 40) * time.Millisecond, // scale = 1.5, jitter = 50ms * (0.9 * 2 - 1)
 		(225 - 30) * time.Millisecond, // scale = 2.25, jitter = 50ms * (0.2 * 2 - 1)
+		330 * time.Millisecond,        // capped at MaxDelay, jitter = 50ms * (0.8 * 2 - 1)
 	}
 
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 4; i++ {
 		if got := tr.calcDelay(i + 1); got != want[i] {
 			t.Errorf("calcDelay(%d) = %v, want %v", i, got, want[i])
 		}

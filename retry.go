@@ -43,6 +43,12 @@ type Tryer struct {
 	// Leaving this set to 0 means the delay will not scale.
 	Scale float64
 
+	// MaxDelay is the maximum delay between attempts.
+	// Scale will not cause the delay to exceed this value.
+	// (However, random Jitter may still be added.)
+	// A value of 0 means there is no maximum delay.
+	MaxDelay time.Duration
+
 	// IsRetryable is an optional function that determines whether an error is retryable.
 	// If it is nil, all errors are considered retryable.
 	IsRetryable func(error) bool
@@ -100,6 +106,10 @@ func (tr Tryer) calcDelay(n int) time.Duration {
 	if tr.Scale > 0 {
 		scale := math.Pow(1+tr.Scale, float64(n-1))
 		delay = time.Duration(float64(delay) * scale)
+	}
+
+	if tr.MaxDelay > 0 && delay > tr.MaxDelay {
+		delay = tr.MaxDelay
 	}
 
 	jitter := tr.Jitter
