@@ -1,3 +1,3 @@
 module github.com/bobg/retry
 
-go 1.7
+go 1.13

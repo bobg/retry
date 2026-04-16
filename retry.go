@@ -53,6 +53,11 @@ type Tryer struct {
 	// If it is nil, all errors are considered retryable.
 	IsRetryable func(error) bool
 
+	// OnRetryableError is an optional function that is called after a retryable error in the callback.
+	// This can be used for logging or other side effects.
+	// It receives the error, the number of the next attempt, and the delay before the next attempt.
+	OnRetryableError func(error, int, time.Duration)
+
 	// After is an optional function returning a channel that sends the current time after the specified duration.
 	// If it is nil, [time.After] is used.
 	After func(time.Duration) <-chan time.Time
@@ -82,6 +87,7 @@ func (tr Tryer) Try(ctx context.Context, f func(int) error) error {
 		}
 
 		n++
+
 		if tr.Max >= 0 && n >= tr.Max {
 			return MaxTriesError{Err: err}
 		}
@@ -91,6 +97,10 @@ func (tr Tryer) Try(ctx context.Context, f func(int) error) error {
 		}
 
 		delay := tr.calcDelay(n)
+
+		if tr.OnRetryableError != nil {
+			tr.OnRetryableError(err, n, delay)
+		}
 
 		select {
 		case <-ctx.Done():
