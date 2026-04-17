@@ -120,11 +120,11 @@ func TestOnRetryableError(t *testing.T) {
 
 		testErr := fmt.Errorf("test error")
 
-		var result error
+		var err error
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			result = tr.Try(context.Background(), func(i int) error {
+			err = tr.Try(context.Background(), func(i int) error {
 				if i < 2 {
 					return testErr
 				}
@@ -141,8 +141,8 @@ func TestOnRetryableError(t *testing.T) {
 
 		<-done
 
-		if result != nil {
-			t.Fatalf("got error %s, want nil", result)
+		if err != nil {
+			t.Fatalf("got error %s, want nil", err)
 		}
 		if len(calls) != 2 {
 			t.Fatalf("got %d calls to OnRetryableError, want 2", len(calls))
@@ -172,14 +172,14 @@ func TestCancel(t *testing.T) {
 		}
 
 		var (
-			n      int
-			result error
-			done   = make(chan struct{})
+			n    int
+			err  error
+			done = make(chan struct{})
 		)
 
 		go func() {
 			defer close(done)
-			result = tr.Try(ctx, func(i int) error {
+			err = tr.Try(ctx, func(i int) error {
 				n = i
 				return fmt.Errorf("test error")
 			})
@@ -205,15 +205,15 @@ func TestCancel(t *testing.T) {
 		if n != 2 {
 			t.Errorf("got n==%d, want 2", n)
 		}
-		if result == nil {
+		if err == nil {
 			t.Fatal("got no error, want ContextError")
 		}
 		var ctxErr ContextError
-		if !errors.As(result, &ctxErr) {
-			t.Errorf("got %T, want ContextError", result)
+		if !errors.As(err, &ctxErr) {
+			t.Errorf("got %T, want ContextError", err)
 		}
-		if !errors.Is(result, context.Canceled) {
-			t.Errorf("got %v, want %v", result, context.Canceled)
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("got %v, want %v", err, context.Canceled)
 		}
 	})
 }
