@@ -99,6 +99,52 @@ func TestTryerUnretryable(t *testing.T) {
 	}
 }
 
+func TestOnRetryableError(t *testing.T) {
+	type callInfo struct {
+		err   error
+		n     int
+		delay time.Duration
+	}
+
+	var calls []callInfo
+
+	tr := Tryer{
+		Max:   3,
+		Delay: time.Millisecond,
+		OnRetryableError: func(err error, n int, delay time.Duration) {
+			calls = append(calls, callInfo{err: err, n: n, delay: delay})
+		},
+	}
+
+	testErr := fmt.Errorf("test error")
+
+	err := tr.Try(context.Background(), func(i int) error {
+		if i < 2 {
+			return testErr
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("got error %s, want nil", err)
+	}
+
+	if len(calls) != 2 {
+		t.Fatalf("got %d calls to OnRetryableError, want 2", len(calls))
+	}
+
+	for i, call := range calls {
+		if !errors.Is(call.err, testErr) {
+			t.Errorf("call %d: got error %v, want %v", i, call.err, testErr)
+		}
+		if call.n != i+1 {
+			t.Errorf("call %d: got n==%d, want %d", i, call.n, i+1)
+		}
+		if call.delay <= 0 {
+			t.Errorf("call %d: got non-positive delay %v", i, call.delay)
+		}
+	}
+}
+
 func TestCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
