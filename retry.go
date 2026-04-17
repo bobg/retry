@@ -58,10 +58,6 @@ type Tryer struct {
 	// It receives the error, the number of the next attempt, and the delay before the next attempt.
 	OnRetryableError func(error, int, time.Duration)
 
-	// After is an optional function returning a channel that sends the current time after the specified duration.
-	// If it is nil, [time.After] is used.
-	After func(time.Duration) <-chan time.Time
-
 	// Rand is an optional function that returns a random float64 in the range [0, 1).
 	// If it is nil, [rand.Float64] is used.
 	Rand func() float64
@@ -105,7 +101,7 @@ func (tr Tryer) Try(ctx context.Context, f func(int) error) error {
 		select {
 		case <-ctx.Done():
 			return ContextError{Err: ctx.Err()}
-		case <-tr.after(delay):
+		case <-time.After(delay):
 		}
 	}
 }
@@ -142,14 +138,6 @@ func (tr Tryer) randFloat() float64 {
 		f = rand.Float64
 	}
 	return f()
-}
-
-func (tr Tryer) after(d time.Duration) <-chan time.Time {
-	after := tr.After
-	if after == nil {
-		after = time.After
-	}
-	return after(d)
 }
 
 // UnretryableError is an error returned by [Tryer.Try]

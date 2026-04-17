@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -100,116 +101,121 @@ func TestTryerUnretryable(t *testing.T) {
 }
 
 func TestOnRetryableError(t *testing.T) {
-	type callInfo struct {
-		err   error
-		n     int
-		delay time.Duration
-	}
-
-	var calls []callInfo
-
-	tr := Tryer{
-		Max:   3,
-		Delay: time.Millisecond,
-		OnRetryableError: func(err error, n int, delay time.Duration) {
-			calls = append(calls, callInfo{err: err, n: n, delay: delay})
-		},
-	}
-
-	testErr := fmt.Errorf("test error")
-
-	err := tr.Try(context.Background(), func(i int) error {
-		if i < 2 {
-			return testErr
+	synctest.Test(t, func(t *testing.T) {
+		type callInfo struct {
+			err   error
+			n     int
+			delay time.Duration
 		}
-		return nil
+
+		var calls []callInfo
+
+		tr := Tryer{
+			Max:   3,
+			Delay: time.Millisecond,
+			OnRetryableError: func(err error, n int, delay time.Duration) {
+				calls = append(calls, callInfo{err: err, n: n, delay: delay})
+			},
+		}
+
+		testErr := fmt.Errorf("test error")
+
+		var err error
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			err = tr.Try(context.Background(), func(i int) error {
+				if i < 2 {
+					return testErr
+				}
+				return nil
+			})
+		}()
+
+		// Let the goroutine run through both retries (two sleeps of 1ms each).
+		synctest.Wait()
+		time.Sleep(time.Millisecond)
+		synctest.Wait()
+		time.Sleep(time.Millisecond)
+		synctest.Wait()
+
+		<-done
+
+		if err != nil {
+			t.Fatalf("got error %s, want nil", err)
+		}
+		if len(calls) != 2 {
+			t.Fatalf("got %d calls to OnRetryableError, want 2", len(calls))
+		}
+		for i, call := range calls {
+			if !errors.Is(call.err, testErr) {
+				t.Errorf("call %d: got error %v, want %v", i, call.err, testErr)
+			}
+			if call.n != i+1 {
+				t.Errorf("call %d: got n==%d, want %d", i, call.n, i+1)
+			}
+			if call.delay <= 0 {
+				t.Errorf("call %d: got non-positive delay %v", i, call.delay)
+			}
+		}
 	})
-	if err != nil {
-		t.Fatalf("got error %s, want nil", err)
-	}
-
-	if len(calls) != 2 {
-		t.Fatalf("got %d calls to OnRetryableError, want 2", len(calls))
-	}
-
-	for i, call := range calls {
-		if !errors.Is(call.err, testErr) {
-			t.Errorf("call %d: got error %v, want %v", i, call.err, testErr)
-		}
-		if call.n != i+1 {
-			t.Errorf("call %d: got n==%d, want %d", i, call.n, i+1)
-		}
-		if call.delay <= 0 {
-			t.Errorf("call %d: got non-positive delay %v", i, call.delay)
-		}
-	}
 }
 
 func TestCancel(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
 
-	timeCh := make(chan time.Time, 5)
-	defer close(timeCh)
+		tr := Tryer{
+			Max:   -1,
+			Delay: time.Second,
+		}
 
-	tr := Tryer{
-		Max: -1,
-		After: func(time.Duration) <-chan time.Time {
-			return timeCh
-		},
-	}
+		var (
+			n    int
+			err  error
+			done = make(chan struct{})
+		)
 
-	var (
-		n    int
-		err  error
-		iter = make(chan int, 5) // receives a value on each invocation of the callback
-		done = make(chan struct{})
-	)
+		go func() {
+			defer close(done)
+			err = tr.Try(ctx, func(i int) error {
+				n = i
+				return fmt.Errorf("test error")
+			})
+		}()
 
-	defer close(iter)
+		// After the first call fails, Try sleeps for Delay before retrying.
+		// Wait until it is durably blocked on time.After.
+		synctest.Wait()
+		// Advance past the first delay → triggers second attempt.
+		time.Sleep(time.Second)
 
-	go func() {
-		err = tr.Try(ctx, func(i int) error {
-			defer func() { iter <- i }()
-			n = i
-			return fmt.Errorf("test error")
-		})
-		close(done)
-	}()
+		synctest.Wait()
+		// Advance past the second delay → triggers third attempt.
+		time.Sleep(time.Second)
 
-	<-iter
-	timeCh <- time.Now()
+		synctest.Wait()
+		// Now cancel the context while Try is sleeping before a fourth attempt.
+		cancel()
 
-	<-iter
-	timeCh <- time.Now()
+		// Try should detect ctx.Done() and return without making another call.
+		<-done
 
-	<-iter
-	cancel()
-
-	timeCh <- time.Now() // this should not trigger another iteration
-
-	select {
-	case <-iter:
-		t.Fatal("got another iteration after cancel")
-
-	case <-done:
-	}
-
-	if n != 2 {
-		t.Errorf("got n==%d, want 2", n)
-	}
-
-	if err == nil {
-		t.Fatal("got no error, want ContextError")
-	}
-
-	var ctxErr ContextError
-	if !errors.As(err, &ctxErr) {
-		t.Errorf("got %T, want ContextError", err)
-	}
-	if !errors.Is(err, context.Canceled) {
-		t.Errorf("got %v, want %v", err, context.Canceled)
-	}
+		if n != 2 {
+			t.Errorf("got n==%d, want 2", n)
+		}
+		if err == nil {
+			t.Fatal("got no error, want ContextError")
+		}
+		var ctxErr ContextError
+		if !errors.As(err, &ctxErr) {
+			t.Errorf("got %T, want ContextError", err)
+		}
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("got %v, want %v", err, context.Canceled)
+		}
+	})
 }
 
 func TestCalcDelay(t *testing.T) {
