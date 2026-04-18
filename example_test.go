@@ -21,7 +21,7 @@ func ExampleTryer() {
 		Delay:  100 * time.Millisecond,
 		Jitter: 50 * time.Millisecond,
 		Scale:  0.5,
-		OnRetryableError: func(_ context.Context, err error, _ int, delay time.Duration) {
+		OnRetry: func(_ context.Context, err error, _ int, delay time.Duration) {
 			fmt.Fprintf(os.Stderr, "Error, will retry after %s: %s\n", delay, err)
 		},
 	}

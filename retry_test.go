@@ -97,7 +97,7 @@ func TestTryerUnretryable(t *testing.T) {
 	}
 }
 
-func TestOnRetryableError(t *testing.T) {
+func TestOnRetry(t *testing.T) {
 	type callInfo struct {
 		err   error
 		n     int
@@ -109,7 +109,7 @@ func TestOnRetryableError(t *testing.T) {
 	tr := Tryer{
 		Max:   3,
 		Delay: time.Millisecond,
-		OnRetryableError: func(_ context.Context, err error, n int, delay time.Duration) {
+		OnRetry: func(_ context.Context, err error, n int, delay time.Duration) {
 			calls = append(calls, callInfo{err: err, n: n, delay: delay})
 		},
 	}
@@ -127,7 +127,7 @@ func TestOnRetryableError(t *testing.T) {
 	}
 
 	if len(calls) != 2 {
-		t.Fatalf("got %d calls to OnRetryableError, want 2", len(calls))
+		t.Fatalf("got %d calls to OnRetry, want 2", len(calls))
 	}
 
 	for i, call := range calls {
