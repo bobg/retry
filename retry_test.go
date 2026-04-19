@@ -36,15 +36,13 @@ func TestTryerMax(t *testing.T) {
 					t.Errorf("got no error, want MaxTriesError")
 					return
 				}
-				// Check that the error is both a MaxTriesError and testErr.
 
 				var maxErr MaxTriesError
 				if !errors.As(err, &maxErr) {
 					t.Errorf("got %T, want MaxTriesError", err)
 				}
-
 				if !errors.Is(err, testErr) {
-					t.Errorf("got %v, want %v", err, testErr)
+					t.Errorf("got %s, want %s", err, testErr)
 				}
 
 				return
@@ -65,7 +63,7 @@ func TestTryerUnretryable(t *testing.T) {
 
 	tr := Tryer{
 		Max: 3,
-		IsRetryable: func(e error) bool {
+		IsRetryable: func(_ context.Context, e error, _ int) bool {
 			return errors.Is(e, retriableErr)
 		},
 	}
@@ -95,11 +93,11 @@ func TestTryerUnretryable(t *testing.T) {
 		t.Errorf("got %T, want UnretryableError", err)
 	}
 	if !errors.Is(err, unretriableErr) {
-		t.Errorf("got %v, want %v", err, unretriableErr)
+		t.Errorf("got %s, want %s", err, unretriableErr)
 	}
 }
 
-func TestOnRetryableError(t *testing.T) {
+func TestOnRetry(t *testing.T) {
 	type callInfo struct {
 		err   error
 		n     int
@@ -111,7 +109,7 @@ func TestOnRetryableError(t *testing.T) {
 	tr := Tryer{
 		Max:   3,
 		Delay: time.Millisecond,
-		OnRetryableError: func(err error, n int, delay time.Duration) {
+		OnRetry: func(_ context.Context, err error, n int, delay time.Duration) {
 			calls = append(calls, callInfo{err: err, n: n, delay: delay})
 		},
 	}
@@ -129,7 +127,7 @@ func TestOnRetryableError(t *testing.T) {
 	}
 
 	if len(calls) != 2 {
-		t.Fatalf("got %d calls to OnRetryableError, want 2", len(calls))
+		t.Fatalf("got %d calls to OnRetry, want 2", len(calls))
 	}
 
 	for i, call := range calls {
